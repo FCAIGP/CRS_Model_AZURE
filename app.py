@@ -69,7 +69,7 @@ def hello_world():
 def predict():
     data = request.get_json()
     text = data.get('text', '')
-    prediction = model.predict(text)
+    prediction = model.predict(text.lower())
     preds_df = pd.concat([pd.DataFrame(labels),pd.DataFrame(prediction[2])],axis=1)
     preds_df.columns = ["Label", "Probability"]
     result = preds_df.sort_values('Probability',ascending=False)
