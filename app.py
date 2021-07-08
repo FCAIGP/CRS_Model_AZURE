@@ -1,76 +1,47 @@
-import numpy as np
 from flask import Flask, request, render_template
 import pickle
+import pandas as pd
+from collections import OrderedDict
+import json
 
 from fastai.vision.all import *
-from fastai.torch_basics import *
-from fastai.data.all import *
-from fastai.text.core import *
-from fastai.text.data import TextDataLoaders
-from fastai.text.learner import language_model_learner
-from fastai.text import *
-from fastai.text.all import *
 
-import os
-import gc
+
+import nltk
+nltk.download('wordnet')
+nltk.download('punkt')
+
+from utils.cleantext import clean_text
+from utils.gdrive import download_file_from_google_drive
+
 application = Flask(__name__)
-
-import pandas as pd
 
 app = Flask(__name__)
 
-import requests
-
-def download_file_from_google_drive(id, destination):
-    URL = "https://docs.google.com/uc?export=download"
-
-    session = requests.Session()
-
-    response = session.get(URL, params = { 'id' : id }, stream = True)
-    token = get_confirm_token(response)
-
-    if token:
-        params = { 'id' : id, 'confirm' : token }
-        response = session.get(URL, params = params, stream = True)
-
-    save_response_content(response, destination)    
-
-def get_confirm_token(response):
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            return value
-
-    return None
-
-def save_response_content(response, destination):
-    CHUNK_SIZE = 32768
-
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk: # filter out keep-alive new chunks
-                f.write(chunk)
-
-
-file_id = '1THaxJhzeElP5A_efR8juHefbLDp5cEMO'
+model_id = '1THaxJhzeElP5A_efR8juHefbLDp5cEMO'
 destination = 'model.pkl'
 
-download_file_from_google_drive(file_id, destination)
-gc.collect()
+download_file_from_google_drive(model_id, destination)
 
-model = load_learner('model.pkl')
+model = load_learner(destination)
 labels = model.dls.vocab[1]
 
 @app.route('/')
 def hello_world():
     return render_template('index.html')
 
-
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.get_json()
-    text = data.get('text', '')
-    prediction = model.predict(text.lower())
-    preds_df = pd.concat([pd.DataFrame(labels),pd.DataFrame(prediction[2])],axis=1)
-    preds_df.columns = ["Label", "Probability"]
-    result = preds_df.sort_values('Probability',ascending=False)
-    return result.to_json()
+	data = request.get_json()
+	text = data.get('text', '')
+	threshold = data.get('threshold',0)
+	if threshold > 1 or threshold < 0:
+	  threshold = 0
+	cleaned = clean_text(text)
+	prediction = model.predict(cleaned)
+	preds_df = pd.concat([pd.DataFrame(labels),pd.DataFrame(prediction[2])],axis=1)
+	preds_df.columns = ["Label", "Probability"]
+	filtered_df = preds_df[preds_df["Probability"] >= threshold]
+	preds_dict = dict(zip(filtered_df.Label, filtered_df.Probability))
+	preds_dict_sorted = sorted(preds_dict.items(), key=lambda x: x[1], reverse=True)
+	return json.dumps({'input':text,'cleaned':cleaned,'threshold':threshold,'prediction': OrderedDict(preds_dict_sorted)})
