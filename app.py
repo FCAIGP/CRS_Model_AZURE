@@ -18,7 +18,7 @@ application = Flask(__name__)
 
 app = Flask(__name__)
 
-model_id = '1THaxJhzeElP5A_efR8juHefbLDp5cEMO'
+model_id = '1lMm8pTVJubGbbrjt1BiHSvEiC6TPZRd-'
 destination = 'model.pkl'
 
 download_file_from_google_drive(model_id, destination)
@@ -29,6 +29,10 @@ labels = model.dls.vocab[1]
 @app.route('/')
 def hello_world():
     return render_template('index.html')
+
+@app.route('/model')
+def get_model_id():
+    return model_id
 
 @app.route('/predict', methods=['POST'])
 def predict():
